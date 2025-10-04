@@ -11,7 +11,7 @@
   #topPiles { display:flex; justify-content:center; gap:50px; margin-top:10px; position:relative; height:200px; }
   .pile { width:60px; height:200px; position:relative; display:flex; flex-direction:column-reverse; align-items:center; justify-content:flex-start; }
   #board { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; margin-top:20px; position:relative; }
-  .grid { display:grid; gap:5px; margin:10px; }
+  .grid { display:grid; gap:1px; margin:10px; }
   .ten-frame { grid-template-columns: repeat(5, 60px); grid-template-rows: repeat(2, 60px); }
   .cell { width:60px; height:60px; border:.5px solid #333; display:flex; justify-content:center; align-items:center; position:relative; }
   .counter { width:50px; height:50px; cursor:grab; position:absolute; user-select:none; touch-action:none; display:flex; justify-content:center; align-items:center; outline:none; }
@@ -41,7 +41,7 @@
   </label>
 
   <label>Pile A Color: <input type="color" id="colorA" value="#00b050"></label>
-  <label>Pile B Color: <input type="color" id="colorB" value="#ff0000"></label>
+  <label>Pile B Color: <input type="color" id="colorB" value="#ffd966"></label>
   <label>Cell Size: <input type="number" id="cellSize" value="60" min="20" max="200" style="width:60px;"></label>
 
   <button id="addA">Add to Pile A</button>
