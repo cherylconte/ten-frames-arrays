@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ten Frame / Array Tool</title>
+<style>
+  body { font-family: Arial, sans-serif; margin:0; padding:0; display:flex; flex-direction:column; align-items:center; }
+  #controls { margin:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+  button, select, input { font-size:14px; padding:5px; }
+  #topPiles { display:flex; justify-content:center; gap:50px; margin-top:10px; position:relative; height:200px; }
+  .pile { width:60px; height:200px; position:relative; display:flex; flex-direction:column-reverse; align-items:center; justify-content:flex-start; }
+  #board { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; margin-top:20px; position:relative; }
+  .grid { display:grid; gap:5px; margin:10px; }
+  .ten-frame { grid-template-columns: repeat(5, 60px); grid-template-rows: repeat(2, 60px); }
+  .cell { width:60px; height:60px; border:1px solid #333; display:flex; justify-content:center; align-items:center; position:relative; }
+  .counter { width:50px; height:50px; cursor:grab; position:absolute; user-select:none; touch-action:none; display:flex; justify-content:center; align-items:center; outline:none; }
+  .counter:focus { outline:none; }
+</style>
+</head>
+<body>
+
+<h2>Interactive Ten Frame / Array Tool</h2>
+
+<div id="controls">
+  <label>Layout:
+    <select id="layoutSelector">
+      <option value="tenFrame1">1 Ten Frame</option>
+      <option value="tenFrame2">2 Ten Frames</option>
+      <option value="tenFrame4">4 Ten Frames</option>
+      <option value="array">Array Mode</option>
+      <option value="blank">Blank Board</option>
+    </select>
+  </label>
+
+  <label>Shape:
+    <select id="shapeSelector">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+    </select>
+  </label>
+
+  <label>Pile A Color: <input type="color" id="colorA" value="#00b050"></label>
+  <label>Pile B Color: <input type="color" id="colorB" value="#ff0000"></label>
+  <label>Cell Size: <input type="number" id="cellSize" value="60" min="20" max="200" style="width:60px;"></label>
+
+  <button id="addA">Add to Pile A</button>
+  <button id="addB">Add to Pile B</button>
+  <button id="reset">Reset</button>
+</div>
+
+<div id="arrayControls" style="margin-bottom:10px; display:none;">
+  <label>Rows: <input type="number" id="arrayRows" value="3" min="1" style="width:50px;"></label>
+  <label>Cols: <input type="number" id="arrayCols" value="4" min="1" style="width:50px;"></label>
+  <button id="updateArray">Update Array</button>
+</div>
+
+<div id="topPiles">
+  <div id="pileA" class="pile"></div>
+  <div id="pileB" class="pile"></div>
+</div>
+
+<div id="board"></div>
+
+<script>
+const board = document.getElementById('board');
+const pileA = document.getElementById('pileA');
+const pileB = document.getElementById('pileB');
+let countersA = [], countersB = [];
+let layout = 'tenFrame1';
+let CELL_SIZE = parseInt(document.getElementById('cellSize').value);
+let COUNTER_SIZE = 50;
+
+// --- Create initial piles ---
+function createPile(pile, count){
+  for(let i=0;i<count;i++){
+    let counter = document.createElement('div');
+    counter.classList.add('counter');
+    counter.dataset.pile = pile;
+    counter.style.width = COUNTER_SIZE+'px';
+    counter.style.height = COUNTER_SIZE+'px';
+    counter.style.background = pile==='A'?document.getElementById('colorA').value:document.getElementById('colorB').value;
+    applyShape(counter,true);
+    pile==='A'?pileA.appendChild(counter):pileB.appendChild(counter);
+    makeDraggable(counter);
+    pile==='A'?countersA.push(counter):countersB.push(counter);
+  }
+}
+
+// --- Shape function ---
+function applyShape(counter,isExisting=false){
+  if(isExisting && counter.dataset.customized) return;
+  let shape = document.getElementById('shapeSelector').value;
+  counter.dataset.customized='true';
+  counter.style.borderRadius = shape==='circle'?'50%':'0';
+  counter.innerHTML='';
+}
+
+// --- Drag counters ---
+function makeDraggable(counter){
+  counter.addEventListener('mousedown', startDrag);
+  counter.addEventListener('touchstart', startDrag);
+}
+
+function startDrag(e){
+  e.preventDefault();
+  const counter = e.target;
+  let offsetX, offsetY;
+  if(e.touches){
+    offsetX = e.touches[0].clientX - counter.getBoundingClientRect().left;
+    offsetY = e.touches[0].clientY - counter.getBoundingClientRect().top;
+  } else {
+    offsetX = e.clientX - counter.getBoundingClientRect().left;
+    offsetY = e.clientY - counter.getBoundingClientRect().top;
+  }
+
+  counter.style.position='absolute';
+  counter.style.zIndex='1000';
+  document.body.appendChild(counter);
+
+  function move(e){
+    let clientX = e.touches?e.touches[0].clientX:e.clientX;
+    let clientY = e.touches?e.touches[0].clientY:e.clientY;
+    counter.style.left = (clientX - offsetX) + 'px';
+    counter.style.top = (clientY - offsetY) + 'px';
+  }
+
+  function up(){
+    document.removeEventListener('mousemove',move);
+    document.removeEventListener('mouseup',up);
+    document.removeEventListener('touchmove',move);
+    document.removeEventListener('touchend',up);
+    snapToCell(counter);
+  }
+
+  document.addEventListener('mousemove',move);
+  document.addEventListener('mouseup',up);
+  document.addEventListener('touchmove',move);
+  document.addEventListener('touchend',up);
+}
+
+// --- Snap to nearest cell (centered) ---
+function snapToCell(counter){
+  const cells = Array.from(board.querySelectorAll('.cell'));
+  if(cells.length===0) return;
+  let counterRect = counter.getBoundingClientRect();
+  let closest = null;
+  let minDist = Infinity;
+  for(let cell of cells){
+    let rect = cell.getBoundingClientRect();
+    let dx = counterRect.left + COUNTER_SIZE/2 - (rect.left + rect.width/2);
+    let dy = counterRect.top + COUNTER_SIZE/2 - (rect.top + rect.height/2);
+    let dist = dx*dx + dy*dy;
+    if(dist<minDist){
+      minDist = dist;
+      closest = cell;
+    }
+  }
+  if(closest){
+    let rect = closest.getBoundingClientRect();
+    counter.style.left = (rect.left + rect.width/2 - COUNTER_SIZE/2 + window.scrollX) + 'px';
+    counter.style.top = (rect.top + rect.height/2 - COUNTER_SIZE/2 + window.scrollY) + 'px';
+  }
+}
+
+// --- Draw board ---
+function drawBoard(){
+  CELL_SIZE = parseInt(document.getElementById('cellSize').value);
+  board.innerHTML='';
+  let layoutSelector = document.getElementById('layoutSelector').value;
+  layout = layoutSelector;
+  if(layout.startsWith('tenFrame')){
+    let count = parseInt(layout.replace('tenFrame',''));
+    board.style.display='grid';
+    board.style.gridTemplateColumns = (count>1?'repeat(2, auto)':'auto');
+    board.style.gridTemplateRows = (count>2?'repeat(2, auto)':'auto');
+    for(let i=0;i<count;i++){
+      let tenFrame = document.createElement('div');
+      tenFrame.classList.add('grid','ten-frame');
+      tenFrame.style.gridTemplateColumns = `repeat(5, ${CELL_SIZE}px)`;
+      tenFrame.style.gridTemplateRows = `repeat(2, ${CELL_SIZE}px)`;
+      for(let j=0;j<10;j++){
+        let cell = document.createElement('div');
+        cell.classList.add('cell');
+        cell.style.width = CELL_SIZE+'px';
+        cell.style.height = CELL_SIZE+'px';
+        tenFrame.appendChild(cell);
+      }
+      board.appendChild(tenFrame);
+    }
+    document.getElementById('arrayControls').style.display='none';
+  } else if(layout==='array'){
+    document.getElementById('arrayControls').style.display='inline-block';
+    let rows = parseInt(document.getElementById('arrayRows').value);
+    let cols = parseInt(document.getElementById('arrayCols').value);
+    board.style.display='grid';
+    board.style.gridTemplateColumns = `repeat(${cols}, ${CELL_SIZE}px)`;
+    board.style.gridTemplateRows = `repeat(${rows}, ${CELL_SIZE}px)`;
+    for(let i=0;i<rows*cols;i++){
+      let cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.style.width = CELL_SIZE+'px';
+      cell.style.height = CELL_SIZE+'px';
+      board.appendChild(cell);
+    }
+  } else {
+    document.getElementById('arrayControls').style.display='none';
+    board.style.display='block';
+  }
+}
+
+// --- Add counter to pile ---
+function addCounter(pile){
+  let targetPile = pile==='A'?pileA:pileB;
+  let counter = document.createElement('div');
+  counter.classList.add('counter');
+  counter.dataset.pile=pile;
+  counter.style.width=COUNTER_SIZE+'px';
+  counter.style.height=COUNTER_SIZE+'px';
+  counter.style.background = pile==='A'?document.getElementById('colorA').value:document.getElementById('colorB').value;
+  applyShape(counter);
+  targetPile.appendChild(counter);
+  makeDraggable(counter);
+  pile==='A'?countersA.push(counter):countersB.push(counter);
+}
+
+// --- Reset ---
+function resetBoard(){
+  const allCounters = document.querySelectorAll('.counter');
+  allCounters.forEach(c => c.remove());
+  pileA.innerHTML='';
+  pileB.innerHTML='';
+  countersA=[];
+  countersB=[];
+  createPile('A',50);
+  createPile('B',50);
+  drawBoard();
+}
+
+// --- Event listeners ---
+document.getElementById('layoutSelector').addEventListener('change',drawBoard);
+document.getElementById('addA').addEventListener('click',()=>addCounter('A'));
+document.getElementById('addB').addEventListener('click',()=>addCounter('B'));
+document.getElementById('reset').addEventListener('click',resetBoard);
+document.getElementById('updateArray').addEventListener('click',drawBoard);
+
+// --- Initialize ---
+resetBoard();
+
+</script>
+</body>
+</html>
